@@ -6,6 +6,7 @@
 <title>ポケGO 検索フィルター組み立て</title>
 <style>
   :root {
+    color-scheme: light dark; /* チェックボックスや数値欄もダークモードに合わせる */
     --bg: #f4f6fb; --card: #fff; --text: #1d2330; --sub: #6b7385;
     --line: #dde2ec; --inc: #2f7df6; --exc: #e5484d; --ok: #18a058;
   }
@@ -16,7 +17,7 @@
   body {
     margin: 0; font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
     background: var(--bg); color: var(--text); font-size: 16px;
-    padding-bottom: 150px; /* 下の固定バーの分 */
+    padding-bottom: calc(170px + env(safe-area-inset-bottom)); /* 下の固定バーの分（実際はJSでバーの高さに合わせる） */
   }
   header { padding: 16px 16px 4px; }
   h1 { font-size: 18px; margin: 0; }
@@ -317,7 +318,13 @@ $("copyBtn").onclick = async () => {
   const text = $("out").value;
   if (!text) return;
   try { await navigator.clipboard.writeText(text); }
-  catch (e) { $("out").select(); document.execCommand("copy"); } // 古いブラウザ用
+  catch (e) {
+    // 予備（古いブラウザ用）。iPhoneは読み取り専用の欄を選択できないので一時的に外す
+    const out = $("out");
+    out.readOnly = false; out.select(); out.setSelectionRange(0, text.length);
+    document.execCommand("copy");
+    out.readOnly = true; out.blur();
+  }
   const btn = $("copyBtn"); btn.textContent = "コピーしました"; btn.classList.add("done");
   setTimeout(() => { btn.textContent = "コピー"; btn.classList.remove("done"); }, 1500);
 };
@@ -342,6 +349,12 @@ $("tagAdd").onclick = () => {
 };
 [...NUM_IDS, "name", "free"].forEach((id) => $(id).addEventListener("input", build));
 $("family").addEventListener("change", build);
+
+// 下の固定バーに一番下の欄が隠れないよう、バーの実際の高さ＋20pxを下の余白にする
+const bar = document.querySelector(".bar");
+const fitPad = () => (document.body.style.paddingBottom = bar.offsetHeight + 20 + "px");
+fitPad();
+if (window.ResizeObserver) new ResizeObserver(fitPad).observe(bar); // 欄の高さが変わったときも追従
 
 renderChips(); renderPresets(); build();
 </script>
