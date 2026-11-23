@@ -212,9 +212,12 @@ function renderChips() {
 }
 
 // 範囲入力 → "CP1500-2500" のような文字列に
+// 0以上の整数だけ受け付ける（小数は切り捨て、それ以外は空欄扱い）
+const toInt = (v) => { const n = parseInt(v, 10); return isNaN(n) || n < 0 ? "" : String(n); };
 function range(prefix, minId, maxId) {
-  const a = $(minId).value.trim(), b = $(maxId).value.trim();
+  let a = toInt($(minId).value), b = toInt($(maxId).value);
   if (!a && !b) return null;
+  if (a && b && Number(a) > Number(b)) [a, b] = [b, a]; // 大小が逆なら入れ替え
   if (a && b) return a === b ? prefix + a : prefix + a + "-" + b;
   return a ? prefix + a + "-" : prefix + "-" + b;
 }
@@ -234,8 +237,11 @@ function build() {
     .forEach((r) => r && parts.push(r));
 
   const names = $("name").value.split(/[,、，]/).map((s) => s.trim()).filter(Boolean);
-  if (names.length) parts.push(names.map((n) => ($("family").checked ? "+" : "") + n).join(","));
-  const free = $("free").value.trim();
+  // 自分で「+」を書いた場合も、チェックONの場合も「+」は1つだけ
+  const plus = (n) => ($("family").checked || /^[+＋]/.test(n) ? "+" : "") + n.replace(/^[+＋]+/, "");
+  if (names.length) parts.push(names.map(plus).join(","));
+  // 自由入力の先頭・末尾の & は外す（&& になるのを防ぐ）
+  const free = $("free").value.trim().replace(/^[&\s]+|[&\s]+$/g, "");
   if (free) parts.push(free);
 
   $("out").value = parts.join("&");
@@ -320,7 +326,9 @@ $("saveBtn").onclick = () => {
   if (!text) return;
   const name = prompt("プリセット名を入力");
   if (!name) return;
-  const saved = loadSaved(); saved[name] = snapshot(); storeSaved(saved); renderPresets();
+  const saved = loadSaved();
+  if (saved[name] && !confirm(name + " はすでにあります。上書きする？")) return;
+  saved[name] = snapshot(); storeSaved(saved); renderPresets();
 };
 $("resetBtn").onclick = () => reset();
 $("tagAdd").onclick = () => {
