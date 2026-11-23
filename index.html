@@ -97,6 +97,18 @@
 </section>
 
 <section>
+  <h2>自分のタグ（同じ枠の中は「または」）</h2>
+  <div class="chips" data-group="tag"></div>
+  <div class="actions">
+    <input type="text" id="tagInput" placeholder="ゲームで付けたタグ名（例：交換用）" style="flex:1; width:auto">
+    <button id="tagAdd">追加</button>
+  </div>
+  <div class="row" style="margin:8px 0 0">
+    <label style="min-width:auto"><input type="checkbox" id="tagDel"> 削除モード（タップしたタグを一覧から消す）</label>
+  </div>
+</section>
+
+<section>
   <h2>数値で絞る（空欄なら無視）</h2>
   <div class="row"><label>CP</label>
     <input type="number" id="cpMin" inputmode="numeric"> <span class="tilde">〜</span>
@@ -155,6 +167,17 @@ const PRESETS = {
   "今日の捕獲": { day: [0, 0] },
 };
 
+// ===== 自分のタグ（ブラウザ内に保存。検索では "#タグ名"、"#" だけならタグ付き全部） =====
+const TAG_KEY = "pogo-filter-tags";
+function loadTags() {
+  try { return JSON.parse(localStorage.getItem(TAG_KEY)) || []; } catch (e) { return []; }
+}
+function saveTags(tags) {
+  try { localStorage.setItem(TAG_KEY, JSON.stringify(tags)); } catch (e) { alert("保存できませんでした"); }
+  GROUPS.tag = ["#", ...tags.map((t) => "#" + t)];
+}
+GROUPS.tag = ["#", ...loadTags().map((t) => "#" + t)];
+
 // ===== 状態 =====
 // state[キーワード] = "inc" | "exc"（未選択はキーなし）
 let state = {};
@@ -168,8 +191,16 @@ function renderChips() {
     GROUPS[box.dataset.group].forEach((word) => {
       const b = document.createElement("button");
       b.className = "chip " + (state[word] || "");
-      b.textContent = word;
+      b.textContent = word === "#" ? "#（タグ付き全部）" : word;
       b.onclick = () => {
+        // タグの削除モード中は、タップしたタグを一覧から消す
+        if (box.dataset.group === "tag" && word !== "#" && $("tagDel").checked) {
+          if (!confirm(word + " を一覧から消す？（ゲーム内のタグは消えません）")) return;
+          saveTags(loadTags().filter((t) => "#" + t !== word));
+          delete state[word];
+          renderChips(); build();
+          return;
+        }
         // 未選択 → 含む → 除外 → 未選択 の順に切り替え
         state[word] = state[word] === undefined ? "inc" : state[word] === "inc" ? "exc" : undefined;
         if (state[word] === undefined) delete state[word];
@@ -292,6 +323,15 @@ $("saveBtn").onclick = () => {
   const saved = loadSaved(); saved[name] = snapshot(); storeSaved(saved); renderPresets();
 };
 $("resetBtn").onclick = () => reset();
+$("tagAdd").onclick = () => {
+  const name = $("tagInput").value.trim().replace(/^[#＃]+/, "");
+  if (!name) return;
+  if (/[&,;:!|]/.test(name)) { alert("& , ; : ! | はタグ名に使えません"); return; }
+  const tags = loadTags();
+  if (!tags.includes(name)) saveTags([...tags, name]);
+  $("tagInput").value = "";
+  renderChips(); build();
+};
 [...NUM_IDS, "name", "free"].forEach((id) => $(id).addEventListener("input", build));
 $("family").addEventListener("change", build);
 
