@@ -67,7 +67,7 @@
 
 <header>
   <h1>ポケGO 検索フィルター組み立て</h1>
-  <p class="hint">タップ1回＝含む（青）／2回＝除外（赤）／3回＝解除。同じ枠の中は「または」、枠どうしは「かつ」でつながります。</p>
+  <p class="hint">タップ1回＝含む（青）／2回＝除外（赤）／3回＝解除。星・タイプ・地方は同じ枠の中が「または」、状態・種類は「かつ」（選んだ全部に当てはまる）。枠どうしは「かつ」でつながります。</p>
 </header>
 
 <section>
@@ -82,7 +82,7 @@
 </section>
 
 <section>
-  <h2>状態・種類</h2>
+  <h2>状態・種類（選んだ全部に当てはまる＝かつ）</h2>
   <div class="chips" data-group="status"></div>
 </section>
 
@@ -136,19 +136,20 @@
 // ※ゲーム側の表記が変わったら、ここの文字列を書き換えてください
 const GROUPS = {
   star:   ["0*", "1*", "2*", "3*", "4*"],
-  status: ["色違い", "シャドウ", "ライト", "伝説のポケモン", "まぼろし", "ウルトラビースト",
-           "キラ", "こうかん", "たまごのみ", "とくべつ", "ダイマックス", "キョダイマックス",
-           "メガシンカ", "すごいとっくん", "お気に入り", "進化", "みとうろく", "オス", "メス"],
+  // 表記は攻略サイト（GameWith 2026-11-16更新 / 9db）の記載に合わせた。すごいとっくんだけは記載なし＝未確認
+  status: ["色違い", "しゃどう", "らいと", "伝説のポケモン", "まぼろし", "ウルトラビースト",
+           "キラ", "こうかん", "たまごのみ", "とくべつ", "だいまっくす", "きょだいまっくす",
+           "めがしんか", "すごいとっくん", "お気に入り", "進化", "みとうろく", "おす", "めす"],
   type:   ["ノーマル", "ほのお", "みず", "でんき", "くさ", "こおり", "かくとう", "どく", "じめん",
            "ひこう", "エスパー", "むし", "いわ", "ゴースト", "ドラゴン", "あく", "はがね", "フェアリー"],
-  region: ["カントー地方", "ジョウト地方", "ホウエン地方", "シンオウ地方", "イッシュ地方",
-           "カロス地方", "アローラ地方", "ガラル地方", "ヒスイ地方", "パルデア地方"],
+  region: ["カントー", "ジョウト", "ホウエン", "シンオウ", "イッシュ",
+           "カロス", "アローラ", "ガラル", "ヒスイ", "パルデア"],
 };
 
 // 組み込みプリセット（state の形で書く：inc=含む, exc=除外）
 const PRESETS = {
-  "送る候補": { exc: ["色違い", "シャドウ", "ライト", "伝説のポケモン", "まぼろし", "キラ",
-                     "お気に入り", "4*", "3*", "こうかん", "とくべつ", "ダイマックス"] },
+  "送る候補": { exc: ["色違い", "しゃどう", "らいと", "伝説のポケモン", "まぼろし", "キラ",
+                     "お気に入り", "4*", "3*", "こうかん", "とくべつ", "だいまっくす"] },
   "100%": { inc: ["4*"] },
   "高個体の色違い": { inc: ["色違い", "3*", "4*"] },
   "今日の捕獲": { day: [0, 0] },
@@ -234,6 +235,25 @@ function loadSaved() {
 function storeSaved(obj) {
   try { localStorage.setItem(KEY, JSON.stringify(obj)); } catch (e) { alert("保存できませんでした"); }
 }
+// 今の画面の状態をまるごと取り出す（保存用）
+function snapshot() {
+  const nums = {};
+  NUM_IDS.forEach((id) => (nums[id] = $(id).value));
+  return { text: $("out").value, state: { ...state }, nums,
+           name: $("name").value, family: $("family").checked, free: $("free").value };
+}
+// 保存した状態を画面に戻す
+function restore(s) {
+  reset(false);
+  if (typeof s === "string") {
+    $("free").value = s; // 古い形式（文字列だけ保存していた頃）はそのまま自由入力へ
+  } else {
+    state = { ...s.state };
+    NUM_IDS.forEach((id) => ($(id).value = s.nums[id] || ""));
+    $("name").value = s.name; $("family").checked = s.family; $("free").value = s.free;
+  }
+  renderChips(); build();
+}
 function renderPresets() {
   const box = $("presets"); box.innerHTML = "";
   for (const name in PRESETS) {
@@ -247,7 +267,7 @@ function renderPresets() {
     const row = document.createElement("div"); row.className = "saved presets";
     const use = document.createElement("button");
     use.textContent = "★ " + name;
-    use.onclick = () => { reset(false); $("free").value = saved[name]; renderChips(); build(); };
+    use.onclick = () => restore(saved[name]);
     const del = document.createElement("button");
     del.textContent = "削除"; del.className = "del";
     del.onclick = () => { if (confirm(name + " を削除？")) { delete saved[name]; storeSaved(saved); renderPresets(); } };
@@ -269,7 +289,7 @@ $("saveBtn").onclick = () => {
   if (!text) return;
   const name = prompt("プリセット名を入力");
   if (!name) return;
-  const saved = loadSaved(); saved[name] = text; storeSaved(saved); renderPresets();
+  const saved = loadSaved(); saved[name] = snapshot(); storeSaved(saved); renderPresets();
 };
 $("resetBtn").onclick = () => reset();
 [...NUM_IDS, "name", "free"].forEach((id) => $(id).addEventListener("input", build));
