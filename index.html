@@ -98,6 +98,14 @@
 </section>
 
 <section>
+  <h2>個体値（PvP向け・同じ行は「または」）</h2>
+  <p class="hint" style="margin:0 0 8px">0=0 / 1=1〜5 / 2=6〜10 / 3=11〜14 / 4=15</p>
+  <div class="row"><label style="min-width:64px">こうげき</label><div class="chips" data-group="atk"></div></div>
+  <div class="row"><label style="min-width:64px">ぼうぎょ</label><div class="chips" data-group="def"></div></div>
+  <div class="row"><label style="min-width:64px">HP</label><div class="chips" data-group="hp"></div></div>
+</section>
+
+<section>
   <h2>自分のタグ（同じ枠の中は「または」）</h2>
   <div class="chips" data-group="tag"></div>
   <div class="actions">
@@ -157,7 +165,12 @@ const GROUPS = {
            "ひこう", "エスパー", "むし", "いわ", "ゴースト", "ドラゴン", "あく", "はがね", "フェアリー"],
   region: ["カントー", "ジョウト", "ホウエン", "シンオウ", "イッシュ",
            "カロス", "アローラ", "ガラル", "ヒスイ", "パルデア"],
+  // 個体値のゲージ（0=0, 1=1〜5, 2=6〜10, 3=11〜14, 4=15）。同じ行は「または」
+  atk:    ["0こうげき", "1こうげき", "2こうげき", "3こうげき", "4こうげき"],
+  def:    ["0ぼうぎょ", "1ぼうぎょ", "2ぼうぎょ", "3ぼうぎょ", "4ぼうぎょ"],
+  hp:     ["0hp", "1hp", "2hp", "3hp", "4hp"],
 };
+const IV_GROUPS = ["atk", "def", "hp"]; // チップには数字だけ表示する枠
 
 // 組み込みプリセット（state の形で書く：inc=含む, exc=除外）
 const PRESETS = {
@@ -166,6 +179,9 @@ const PRESETS = {
   "100%": { inc: ["4*"] },
   "高個体の色違い": { inc: ["色違い", "3*", "4*"] },
   "今日の捕獲": { day: [0, 0] },
+  // PvPは攻撃が低く、防御・HPが高い個体が有利になりやすい
+  "スーパーリーグ候補": { inc: ["0こうげき", "1こうげき", "3ぼうぎょ", "4ぼうぎょ", "3hp", "4hp"], cp: ["", 1500] },
+  "ハイパーリーグ候補": { inc: ["0こうげき", "1こうげき", "3ぼうぎょ", "4ぼうぎょ", "3hp", "4hp"], cp: ["", 2500] },
 };
 
 // ===== 自分のタグ（ブラウザ内に保存。検索では "#タグ名"、"#" だけならタグ付き全部） =====
@@ -192,7 +208,8 @@ function renderChips() {
     GROUPS[box.dataset.group].forEach((word) => {
       const b = document.createElement("button");
       b.className = "chip " + (state[word] || "");
-      b.textContent = word === "#" ? "#（タグ付き全部）" : word;
+      b.textContent = word === "#" ? "#（タグ付き全部）"
+        : IV_GROUPS.includes(box.dataset.group) ? word[0] : word;
       b.onclick = () => {
         // タグの削除モード中は、タップしたタグを一覧から消す
         if (box.dataset.group === "tag" && word !== "#" && $("tagDel").checked) {
@@ -254,6 +271,7 @@ function applyPreset(p) {
   (p.inc || []).forEach((w) => (state[w] = "inc"));
   (p.exc || []).forEach((w) => (state[w] = "exc"));
   if (p.day) { $("dayMin").value = p.day[0]; $("dayMax").value = p.day[1]; }
+  if (p.cp) { $("cpMin").value = p.cp[0]; $("cpMax").value = p.cp[1]; }
   if (p.raw) $("free").value = p.raw;
   renderChips(); build();
 }
