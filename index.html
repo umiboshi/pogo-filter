@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ポケGO 検索フィルター組み立て</title>
+<style>
+  :root {
+    --bg: #f4f6fb; --card: #fff; --text: #1d2330; --sub: #6b7385;
+    --line: #dde2ec; --inc: #2f7df6; --exc: #e5484d; --ok: #18a058;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #12151c; --card: #1c212b; --text: #e8ebf2; --sub: #98a0b3; --line: #2e3542; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    background: var(--bg); color: var(--text); font-size: 16px;
+    padding-bottom: 150px; /* 下の固定バーの分 */
+  }
+  header { padding: 16px 16px 4px; }
+  h1 { font-size: 18px; margin: 0; }
+  .hint { color: var(--sub); font-size: 12px; margin: 4px 0 0; }
+  section {
+    background: var(--card); margin: 12px; padding: 12px; border-radius: 12px;
+    border: 1px solid var(--line);
+  }
+  h2 { font-size: 14px; margin: 0 0 8px; color: var(--sub); font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    border: 1px solid var(--line); background: transparent; color: var(--text);
+    padding: 8px 12px; border-radius: 999px; font-size: 14px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .chip.inc { background: var(--inc); border-color: var(--inc); color: #fff; }
+  .chip.exc { background: var(--exc); border-color: var(--exc); color: #fff; text-decoration: line-through; }
+  .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+  .row label { min-width: 52px; font-size: 14px; }
+  input[type=number], input[type=text] {
+    font-size: 16px; /* iPhoneのズーム防止 */
+    padding: 8px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); color: var(--text); width: 90px;
+  }
+  input[type=text] { width: 100%; }
+  .tilde { color: var(--sub); }
+  .presets button, .actions button {
+    font-size: 14px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--text); cursor: pointer;
+  }
+  .saved { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+  .saved .del { color: var(--exc); }
+  .bar {
+    position: fixed; left: 0; right: 0; bottom: 0; background: var(--card);
+    border-top: 1px solid var(--line); padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  }
+  #out {
+    width: 100%; min-height: 44px; font-size: 16px; padding: 8px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text);
+    word-break: break-all; font-family: ui-monospace, monospace;
+  }
+  .actions { display: flex; gap: 8px; margin-top: 8px; }
+  .actions .copy { flex: 1; background: var(--inc); color: #fff; border: none; font-weight: 700; }
+  .actions .copy.done { background: var(--ok); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ポケGO 検索フィルター組み立て</h1>
+  <p class="hint">タップ1回＝含む（青）／2回＝除外（赤）／3回＝解除。同じ枠の中は「または」、枠どうしは「かつ」でつながります。</p>
+</header>
+
+<section>
+  <h2>プリセット</h2>
+  <div class="presets chips" id="presets"></div>
+  <div id="savedList"></div>
+</section>
+
+<section>
+  <h2>ポケモン評価（個体値の星）</h2>
+  <div class="chips" data-group="star"></div>
+</section>
+
+<section>
+  <h2>状態・種類</h2>
+  <div class="chips" data-group="status"></div>
+</section>
+
+<section>
+  <h2>タイプ</h2>
+  <div class="chips" data-group="type"></div>
+</section>
+
+<section>
+  <h2>地方</h2>
+  <div class="chips" data-group="region"></div>
+</section>
+
+<section>
+  <h2>数値で絞る（空欄なら無視）</h2>
+  <div class="row"><label>CP</label>
+    <input type="number" id="cpMin" inputmode="numeric"> <span class="tilde">〜</span>
+    <input type="number" id="cpMax" inputmode="numeric"></div>
+  <div class="row"><label>日数</label>
+    <input type="number" id="dayMin" inputmode="numeric"> <span class="tilde">〜</span>
+    <input type="number" id="dayMax" inputmode="numeric"></div>
+  <div class="row"><label>年</label>
+    <input type="number" id="yearMin" inputmode="numeric"> <span class="tilde">〜</span>
+    <input type="number" id="yearMax" inputmode="numeric"></div>
+</section>
+
+<section>
+  <h2>ポケモン名・自由入力</h2>
+  <div class="row">
+    <input type="text" id="name" placeholder="例：ピカチュウ（カンマ区切りで複数OK）">
+  </div>
+  <div class="row">
+    <label style="min-width:auto"><input type="checkbox" id="family"> 進化系統ごと（+を付ける）</label>
+  </div>
+  <div class="row">
+    <input type="text" id="free" placeholder="その他のキーワードをそのまま追加（例：@ひっかく）">
+  </div>
+</section>
+
+<div class="bar">
+  <textarea id="out" rows="2" readonly placeholder="ここに検索文字列が出ます"></textarea>
+  <div class="actions">
+    <button class="copy" id="copyBtn">コピー</button>
+    <button id="saveBtn">保存</button>
+    <button id="resetBtn">リセット</button>
+  </div>
+</div>
+
+<script>
+// ===== 設定：キーワードはここを直せばOK =====
+// ※ゲーム側の表記が変わったら、ここの文字列を書き換えてください
+const GROUPS = {
+  star:   ["0*", "1*", "2*", "3*", "4*"],
+  status: ["色違い", "シャドウ", "ライト", "伝説のポケモン", "まぼろし", "ウルトラビースト",
+           "キラ", "こうかん", "たまごのみ", "とくべつ", "ダイマックス", "キョダイマックス",
+           "メガシンカ", "すごいとっくん", "お気に入り", "進化", "みとうろく", "オス", "メス"],
+  type:   ["ノーマル", "ほのお", "みず", "でんき", "くさ", "こおり", "かくとう", "どく", "じめん",
+           "ひこう", "エスパー", "むし", "いわ", "ゴースト", "ドラゴン", "あく", "はがね", "フェアリー"],
+  region: ["カントー地方", "ジョウト地方", "ホウエン地方", "シンオウ地方", "イッシュ地方",
+           "カロス地方", "アローラ地方", "ガラル地方", "ヒスイ地方", "パルデア地方"],
+};
+
+// 組み込みプリセット（state の形で書く：inc=含む, exc=除外）
+const PRESETS = {
+  "送る候補": { exc: ["色違い", "シャドウ", "ライト", "伝説のポケモン", "まぼろし", "キラ",
+                     "お気に入り", "4*", "3*", "こうかん", "とくべつ", "ダイマックス"] },
+  "100%": { inc: ["4*"] },
+  "高個体の色違い": { inc: ["色違い", "3*", "4*"] },
+  "今日の捕獲": { day: [0, 0] },
+};
+
+// ===== 状態 =====
+// state[キーワード] = "inc" | "exc"（未選択はキーなし）
+let state = {};
+const $ = (id) => document.getElementById(id);
+const NUM_IDS = ["cpMin", "cpMax", "dayMin", "dayMax", "yearMin", "yearMax"];
+
+// チップ（ボタン）を作る
+function renderChips() {
+  document.querySelectorAll("[data-group]").forEach((box) => {
+    box.innerHTML = "";
+    GROUPS[box.dataset.group].forEach((word) => {
+      const b = document.createElement("button");
+      b.className = "chip " + (state[word] || "");
+      b.textContent = word;
+      b.onclick = () => {
+        // 未選択 → 含む → 除外 → 未選択 の順に切り替え
+        state[word] = state[word] === undefined ? "inc" : state[word] === "inc" ? "exc" : undefined;
+        if (state[word] === undefined) delete state[word];
+        renderChips(); build();
+      };
+      box.appendChild(b);
+    });
+  });
+}
+
+// 範囲入力 → "CP1500-2500" のような文字列に
+function range(prefix, minId, maxId) {
+  const a = $(minId).value.trim(), b = $(maxId).value.trim();
+  if (!a && !b) return null;
+  if (a && b) return a === b ? prefix + a : prefix + a + "-" + b;
+  return a ? prefix + a + "-" : prefix + "-" + b;
+}
+
+// 検索文字列を組み立てる
+// ルール：同じ枠の「含む」は , （または）で結合、枠どうし・除外は & （かつ）で結合
+function build() {
+  const parts = [];
+  for (const g in GROUPS) {
+    const inc = GROUPS[g].filter((w) => state[w] === "inc");
+    const exc = GROUPS[g].filter((w) => state[w] === "exc");
+    // 状態・種類は「色違い かつ 4*」のように AND で使いたいことが多いので & で結合
+    if (inc.length) parts.push(g === "status" ? inc.join("&") : inc.join(","));
+    exc.forEach((w) => parts.push("!" + w));
+  }
+  [range("CP", "cpMin", "cpMax"), range("日数", "dayMin", "dayMax"), range("年", "yearMin", "yearMax")]
+    .forEach((r) => r && parts.push(r));
+
+  const names = $("name").value.split(/[,、，]/).map((s) => s.trim()).filter(Boolean);
+  if (names.length) parts.push(names.map((n) => ($("family").checked ? "+" : "") + n).join(","));
+  const free = $("free").value.trim();
+  if (free) parts.push(free);
+
+  $("out").value = parts.join("&");
+}
+
+// プリセット適用
+function applyPreset(p) {
+  reset(false);
+  (p.inc || []).forEach((w) => (state[w] = "inc"));
+  (p.exc || []).forEach((w) => (state[w] = "exc"));
+  if (p.day) { $("dayMin").value = p.day[0]; $("dayMax").value = p.day[1]; }
+  if (p.raw) $("free").value = p.raw;
+  renderChips(); build();
+}
+
+function reset(rebuild = true) {
+  state = {};
+  NUM_IDS.forEach((id) => ($(id).value = ""));
+  $("name").value = ""; $("free").value = ""; $("family").checked = false;
+  if (rebuild) { renderChips(); build(); }
+}
+
+// ===== 自分用プリセットの保存（ブラウザ内に保存） =====
+const KEY = "pogo-filter-saved";
+function loadSaved() {
+  try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; }
+}
+function storeSaved(obj) {
+  try { localStorage.setItem(KEY, JSON.stringify(obj)); } catch (e) { alert("保存できませんでした"); }
+}
+function renderPresets() {
+  const box = $("presets"); box.innerHTML = "";
+  for (const name in PRESETS) {
+    const b = document.createElement("button");
+    b.textContent = name; b.onclick = () => applyPreset(PRESETS[name]);
+    box.appendChild(b);
+  }
+  const list = $("savedList"); list.innerHTML = "";
+  const saved = loadSaved();
+  for (const name in saved) {
+    const row = document.createElement("div"); row.className = "saved presets";
+    const use = document.createElement("button");
+    use.textContent = "★ " + name;
+    use.onclick = () => { reset(false); $("free").value = saved[name]; renderChips(); build(); };
+    const del = document.createElement("button");
+    del.textContent = "削除"; del.className = "del";
+    del.onclick = () => { if (confirm(name + " を削除？")) { delete saved[name]; storeSaved(saved); renderPresets(); } };
+    row.append(use, del); list.appendChild(row);
+  }
+}
+
+// ===== ボタン =====
+$("copyBtn").onclick = async () => {
+  const text = $("out").value;
+  if (!text) return;
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) { $("out").select(); document.execCommand("copy"); } // 古いブラウザ用
+  const btn = $("copyBtn"); btn.textContent = "コピーしました"; btn.classList.add("done");
+  setTimeout(() => { btn.textContent = "コピー"; btn.classList.remove("done"); }, 1500);
+};
+$("saveBtn").onclick = () => {
+  const text = $("out").value;
+  if (!text) return;
+  const name = prompt("プリセット名を入力");
+  if (!name) return;
+  const saved = loadSaved(); saved[name] = text; storeSaved(saved); renderPresets();
+};
+$("resetBtn").onclick = () => reset();
+[...NUM_IDS, "name", "free"].forEach((id) => $(id).addEventListener("input", build));
+$("family").addEventListener("change", build);
+
+renderChips(); renderPresets(); build();
+</script>
+</body>
+</html>
